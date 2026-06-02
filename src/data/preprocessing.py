@@ -1,162 +1,105 @@
-"""Data preprocessing module for the auto fuel efficiency pipeline.
+"""Data preprocessing pipeline for the customer churn engine."""
 
-This module defines preprocessing logic for numeric and categorical
-features and persists the preprocessor artifacts for later prediction.
-"""
-
-from pathlib import Path
-from src.utils.logger import logger
-from src.utils.exception import CustomException
-from dataclasses import dataclass
-import pandas as pd
-from sklearn.preprocessing import StandardScaler, OrdinalEncoder, OneHotEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
-from src.utils.helper import save_object
 import sys
 import numpy as np
+import pandas as pd
+from dataclasses import dataclass
+from pathlib import Path
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
+from src.utils.logger import logger
+from src.utils.exception import CustomException
+from src.utils.helper import save_object, load_config
 
 
 @dataclass
 class DataPreprocessingConfig:
-    """Configuration for preprocessing artifact file paths."""
-
-    preprocessor_obj_file_path = Path("artifacts") / "preprocessor.pkl"
-    scaler_y_obj_file_path = Path("artifacts") / "scaler_y.pkl"
+    preprocessor_obj_file_path: Path = Path("artifacts") / "preprocessor.pkl"
 
 
 class DataPreprocessing:
-    """Create preprocessing pipelines and transform raw datasets."""
-
     def __init__(self):
-        """Initialize preprocessing configuration."""
-        self.data_preprocessing_config = DataPreprocessingConfig()
+        self.config = DataPreprocessingConfig()
 
-    def initiate_data_preprocessing(
-        self, train_data_path, val_data_path, test_data_path
-    ):
-        """Load datasets, create feature pipelines, and transform all splits.
-
-        Parameters
-        ----------
-        train_data_path : str | Path
-            Path to the training CSV file.
-        val_data_path : str | Path
-            Path to the validation CSV file.
-        test_data_path : str | Path
-            Path to the test CSV file.
-
-        Returns
-        -------
-        tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]
-            Transformed training, validation, and test features and targets.
-        """
+    def initiate_data_preprocessing(self, train_path, val_path, test_path):
+        logger.info("Initiated data preprocessing")
         try:
-            logger.info("Initiated Data Preprocessing")
-            df_train = pd.read_csv(train_data_path)
-            df_val = pd.read_csv(val_data_path)
-            df_test = pd.read_csv(test_data_path)
+            df_train = pd.read_csv(train_path)
+            df_val = pd.read_csv(val_path)
+            df_test = pd.read_csv(test_path)
 
-            # Identify numeric and categorical features and target
-            # column_names = ['MPG', 'Cylinders', 'Displacement', 'Horsepower', 'Weight', 'Acceleration', 'Model Year', 'Origin']
-            target_column = "MPG"
-            # Using Model Year as a numeric column instead of ordinal to avoid the equal spacing between years
-            numeric_mean_columns = [
-                "Displacement",
-                "Horsepower",
-                "Weight",
-                "Acceleration",
-            ]
-            numeric_mode_columns = ["Cylinders", "Model Year"]
-            categorical_nominal_columns = ["Origin"]
+            # Drop ID column
+            for df in [df_train, df_val, df_test]:
+                df.drop(columns=['customerID'], inplace=True)
+                df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
 
-            df_y_train = df_train[target_column]
-            df_X_train = df_train.drop(columns=[target_column])
-            df_y_val = df_val[target_column]
-            df_X_val = df_val.drop(columns=[target_column])
-            df_y_test = df_test[target_column]
-            df_X_test = df_test.drop(columns=[target_column])
+            # Target encoding
+            target = 'Churn'
+            for df in [df_train, df_val, df_test]:
+                df[target] = df[target].map({'Yes': 1, 'No': 0})
 
-            logger.info("Creating preprocessing pipeline object")
-            # Preprocessing pipeline
-            numeric_mean_pipeline = Pipeline(
-                [
-                    ("imputer", SimpleImputer(strategy="mean")),
-                    ("scaler", StandardScaler()),
-                ]
-            )
-            numeric_mode_pipeline = Pipeline(
-                [
-                    ("imputer", SimpleImputer(strategy="most_frequent")),
-                    ("scaler", StandardScaler()),
-                ]
-            )
-            nominal_pipeline = Pipeline(
-                [
-                    ("imputer", SimpleImputer(strategy="most_frequent")),
-                    (
-                        "encoder",
-                        OneHotEncoder(
-                            handle_unknown="ignore", drop="first", sparse_output=False
-                        ),
-                    ),
-                ]
-            )
+            # Split X and y
+            y_train = df_train[target].values.astype('float32')
+            y_val = df_val[target].values.astype('float32')
+            y_test = df_test[target].values.astype('float32')
 
-            preprocessing_pipeline = ColumnTransformer(
-                [
-                    ("numeric_mean", numeric_mean_pipeline, numeric_mean_columns),
-                    ("numeric_mode", numeric_mode_pipeline, numeric_mode_columns),
-                    ("nominal", nominal_pipeline, categorical_nominal_columns),
-                ]
-            )
+            X_train = df_train.drop(columns=[target])
+            X_val = df_val.drop(columns=[target])
+            X_test = df_test.drop(columns=[target])
 
-            # fit and transform training data
-            X_train_arr = preprocessing_pipeline.fit_transform(df_X_train)
+            # Feature groups
+            numeric_cols = ['tenure', 'MonthlyCharges', 'TotalCharges']
+            binary_cols = ['Partner', 'Dependents', 'PhoneService', 'PaperlessBilling',
+                          'MultipleLines', 'OnlineSecurity', 'OnlineBackup',
+                          'DeviceProtection', 'TechSupport', 'StreamingTV', 'StreamingMovies']
+            nominal_cols = ['gender', 'InternetService', 'Contract', 'PaymentMethod']
 
-            # transform validation and test data
-            X_val_arr = preprocessing_pipeline.transform(df_X_val)
-            X_test_arr = preprocessing_pipeline.transform(df_X_test)
+            # Pipelines
+            numeric_pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='mean')),
+                ('scaler', StandardScaler())
+            ])
 
-            # Scale target
-            scaler_y = StandardScaler()
-            y_train_arr = (
-                scaler_y.fit_transform(df_y_train.values.reshape(-1, 1))
-                .flatten()
-                .astype("float32")
-            )
-            y_val_arr = (
-                scaler_y.transform(df_y_val.values.reshape(-1, 1))
-                .flatten()
-                .astype("float32")
-            )
+            binary_pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='most_frequent')),
+                ('encoder', OrdinalEncoder(
+                    categories=[['No', 'Yes']] * len(binary_cols),
+                    handle_unknown='use_encoded_value',
+                    unknown_value=-1
+                ))
+            ])
 
-            y_test_arr = (
-                scaler_y.transform(df_y_test.values.reshape(-1, 1))
-                .flatten()
-                .astype("float32")
-            )
+            nominal_pipeline = Pipeline([
+                ('imputer', SimpleImputer(strategy='most_frequent')),
+                ('encoder', OneHotEncoder(
+                    drop='first',
+                    handle_unknown='ignore',
+                    sparse_output=False
+                ))
+            ])
 
-            # save preprocessor objects
-            save_object(
-                obj=preprocessing_pipeline,
-                file_path=self.data_preprocessing_config.preprocessor_obj_file_path,
-            )
-            save_object(
-                obj=scaler_y,
-                file_path=self.data_preprocessing_config.scaler_y_obj_file_path,
-            )
-            logger.info("Saved preprocessing pipeline objects")
+            preprocessor = ColumnTransformer([
+                ('numeric', numeric_pipeline, numeric_cols),
+                ('binary', binary_pipeline, binary_cols),
+                ('nominal', nominal_pipeline, nominal_cols)
+            ])
 
-            logger.info("Data Transformation Completed")
-            return (
-                X_train_arr.astype("float32"),
-                X_val_arr.astype("float32"),
-                X_test_arr.astype("float32"),
-                y_train_arr,
-                y_val_arr,
-                y_test_arr,
-            )
+            # Fit on train only
+            preprocessor.fit(X_train)
+            X_train_arr = preprocessor.transform(X_train).astype('float32')
+            X_val_arr = preprocessor.transform(X_val).astype('float32')
+            X_test_arr = preprocessor.transform(X_test).astype('float32')
+
+            # Save preprocessor
+            Path("artifacts").mkdir(parents=True, exist_ok=True)
+            save_object(obj=preprocessor,
+                       file_path=self.config.preprocessor_obj_file_path)
+            logger.info("Saved preprocessor to artifacts")
+
+            logger.info("Data preprocessing complete")
+            return X_train_arr, X_val_arr, X_test_arr, y_train, y_val, y_test
+
         except Exception as e:
             raise CustomException(e, sys)
