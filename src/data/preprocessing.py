@@ -9,10 +9,22 @@ from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
-
+from sklearn.preprocessing import FunctionTransformer
 from src.utils.logger import logger
 from src.utils.exception import CustomException
 from src.utils.helper import save_object, load_config
+
+
+def collapse_no_service(X):
+    """Map 'No internet service' / 'No phone service' to 'No'."""
+    return pd.DataFrame(X).replace(
+        {"No internet service": "No", "No phone service": "No"}
+    )
+
+
+def to_numeric(X):
+    """Convert columns to numbers; blanks (e.g. TotalCharges for new customers) become NaN."""
+    return pd.DataFrame(X).apply(pd.to_numeric, errors="coerce")
 
 
 @dataclass
@@ -53,7 +65,6 @@ class DataPreprocessing:
             # Feature groups
             numeric_cols = ["tenure", "MonthlyCharges", "TotalCharges"]
             binary_cols = [
-                "SeniorCitizen",
                 "Partner",
                 "Dependents",
                 "PhoneService",
@@ -71,6 +82,10 @@ class DataPreprocessing:
             # Pipelines
             numeric_pipeline = Pipeline(
                 [
+                    (
+                        "to_numeric",
+                        FunctionTransformer(to_numeric, feature_names_out="one-to-one"),
+                    ),
                     ("imputer", SimpleImputer(strategy="mean")),
                     ("scaler", StandardScaler()),
                 ]
@@ -78,6 +93,12 @@ class DataPreprocessing:
 
             binary_pipeline = Pipeline(
                 [
+                    (
+                        "collapse",
+                        FunctionTransformer(
+                            collapse_no_service, feature_names_out="one-to-one"
+                        ),
+                    ),
                     ("imputer", SimpleImputer(strategy="most_frequent")),
                     (
                         "encoder",
@@ -107,7 +128,9 @@ class DataPreprocessing:
                     ("numeric", numeric_pipeline, numeric_cols),
                     ("binary", binary_pipeline, binary_cols),
                     ("nominal", nominal_pipeline, nominal_cols),
-                ]
+                    ("passthrough", "passthrough", ["SeniorCitizen"]),
+                ],
+                remainder="drop",
             )
 
             # Fit on train only

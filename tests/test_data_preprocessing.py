@@ -10,6 +10,8 @@ def test_data_preprocessing(pipeline_data):
         pipeline_data
     )
 
+    assert (X_train_arr != -1).all(), "Unknown category codes found after preprocessing"
+
     # Row count matches
     assert len(X_train_arr) == len(
         y_train_arr

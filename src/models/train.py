@@ -56,7 +56,9 @@ class ModelTrainer:
             logger.info(f"Random forest val ROC-AUC: {rf_auc:.4f}")
 
             # Keep the better model on validation
-            if rf_auc > lr_auc:
+            # Prefer the simpler model unless the forest is clearly better
+            min_gain = 0.01
+            if rf_auc - lr_auc > min_gain:
                 best_name, best_model, best_auc = "random_forest", rf, rf_auc
             else:
                 best_name, best_model, best_auc = "logistic_regression", lr, lr_auc
