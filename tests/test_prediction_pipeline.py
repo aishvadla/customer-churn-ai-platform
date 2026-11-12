@@ -67,8 +67,8 @@ def test_prediction_pipeline(pipeline_data, tmp_path):
         model_path=trainer.config.model_file_path,
         background_path=background_path,
     )
-    high = pipeline.predict(HIGH_RISK)
-    low = pipeline.predict(LOW_RISK)
+    high = pipeline.predict(HIGH_RISK, include_note=False)
+    low = pipeline.predict(LOW_RISK, include_note=False)
 
     # Output format
     for result in (high, low):
@@ -82,3 +82,5 @@ def test_prediction_pipeline(pipeline_data, tmp_path):
     assert high["churn_probability"] > low["churn_probability"]
     assert high["reasons"][0]["effect"] == "increases churn risk"
     assert low["reasons"][0]["effect"] == "decreases churn risk"
+
+    assert result["retention_note"] is None
