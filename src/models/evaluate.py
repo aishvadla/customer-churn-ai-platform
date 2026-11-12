@@ -77,7 +77,7 @@ class ModelEvaluator:
                 f"Test ROC-AUC: {metrics['roc_auc']}, PR-AUC: {metrics['pr_auc']}, "
                 f"churn recall: {metrics['report']['churn']['recall']:.4f}"
             )
-            logger.info("Saved metrics.json file to artifacts")
+            logger.info(f"Saved metrics to {self.config.metrics_path}")
             return metrics
 
         except Exception as e:

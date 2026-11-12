@@ -46,3 +46,7 @@ class TrainPipeline:
 
         logger.info(f"Training pipeline complete. Metrics: {metrics}")
         return metrics
+
+
+if __name__ == "__main__":
+    TrainPipeline().train()
