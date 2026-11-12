@@ -47,3 +47,31 @@ class PredictionPipeline:
             "will_churn": proba >= self.threshold,
             "reasons": self.explainer.top_reasons(X, raw, self.original_cols)[0],
         }
+
+
+if __name__ == "__main__":
+    import json
+
+    customer = {
+        "customerID": "DEMO-0001",
+        "gender": "Female",
+        "SeniorCitizen": 0,
+        "Partner": "No",
+        "Dependents": "No",
+        "tenure": 1,
+        "PhoneService": "Yes",
+        "MultipleLines": "No",
+        "InternetService": "Fiber optic",
+        "OnlineSecurity": "No",
+        "OnlineBackup": "No",
+        "DeviceProtection": "No",
+        "TechSupport": "No",
+        "StreamingTV": "No",
+        "StreamingMovies": "No",
+        "Contract": "Month-to-month",
+        "PaperlessBilling": "Yes",
+        "PaymentMethod": "Electronic check",
+        "MonthlyCharges": 85.0,
+        "TotalCharges": "85.0",
+    }
+    print(json.dumps(PredictionPipeline().predict(customer), indent=2))
