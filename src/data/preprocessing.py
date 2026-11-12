@@ -52,6 +52,7 @@ class DataPreprocessing:
             # Feature groups
             numeric_cols = ["tenure", "MonthlyCharges", "TotalCharges"]
             binary_cols = [
+                "SeniorCitizen",
                 "Partner",
                 "Dependents",
                 "PhoneService",
