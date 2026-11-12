@@ -4,11 +4,14 @@ This module connects data ingestion, preprocessing, model training,
 and model evaluation into a single end-to-end pipeline.
 """
 
+import pandas as pd
 from src.data.ingestion import DataIngestion
 from src.data.preprocessing import DataPreprocessing
 from src.models.train import ModelTrainer
 from src.models.evaluate import ModelEvaluator
 from src.utils.logger import logger
+from pathlib import Path
+from src.utils.helper import save_object, load_object
 
 
 class TrainPipeline:
@@ -37,6 +40,15 @@ class TrainPipeline:
                 train_path, val_path, test_path
             )
         )
+
+        # Stage 2b — SHAP background sample for explanations at inference
+        preprocessor = load_object(
+            self.preprocessor_obj.config.preprocessor_obj_file_path
+        )
+        background = pd.DataFrame(
+            X_train, columns=preprocessor.get_feature_names_out()
+        ).sample(100, random_state=42)
+        save_object(obj=background, file_path=Path("artifacts") / "shap_background.pkl")
 
         # Stage 3 — training
         self.trainer_obj.initiate_model_training(X_train, X_val, y_train, y_val)
