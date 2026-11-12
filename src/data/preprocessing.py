@@ -63,7 +63,7 @@ class DataPreprocessing:
             X_test = df_test.drop(columns=[target])
 
             # Feature groups
-            numeric_cols = ["tenure", "MonthlyCharges", "TotalCharges"]
+            numeric_cols = ["tenure", "MonthlyCharges"]
             binary_cols = [
                 "Partner",
                 "Dependents",
