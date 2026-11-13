@@ -1,8 +1,8 @@
-# Customer Churn AI
+# Customer Retention Intelligence Platform
 
 ![CI](https://github.com/aishvadla/customer-churn-ai-platform/actions/workflows/main.yaml/badge.svg)
 
-An **end-to-end churn prediction service**: it predicts which telecom customers are likely to leave, explains *why* with SHAP, and writes a short retention note for the customer success team with an LLM, served through a FastAPI REST API.
+An **end-to-end churn prediction service**: it predicts which telecom customers are likely to leave, explains *why* with SHAP, and writes a short retention note for the customer success team with an LLM, served through a FastAPI REST API and packaged as a Docker image.
 
 ```
 Customer record ──► Validation ──► Churn model ──► SHAP reasons ──► LLM retention note
@@ -137,7 +137,9 @@ Raw Data (IBM Telco Customer Churn)
 
 **Data issues found through explainability.** SHAP plots revealed unhandled "No internet service" categories encoded as `-1`; fixing them is covered by a regression test. SHAP also showed `TotalCharges` (correlation 0.83 with tenure) producing counter-intuitive explanations, so it was dropped, at a cost of 0.001 test ROC-AUC.
 
-**CI-safe tests.** Tests train small models into pytest's `tmp_path`, mock the LLM API, and run on a fresh CI checkout with no saved artifacts or API key. They check behaviour, not just types: a high-risk customer must outscore a low-risk one, and the top reasons must point in the right direction.
+**Containerized and reproducible.** The API ships as a Docker image built with uv from the locked dependencies (`uv sync --frozen`). The trained artifacts are small and committed to the repo, so anyone can clone and serve the exact model behind the README's metrics. The API key is passed at run time (`--env-file`), never baked into the image, and `.dockerignore` keeps local environments and secrets out of the build. In production, models would come from a model registry instead of git.
+
+**CI-safe tests.** Tests train small models into pytest's `tmp_path`, mock the LLM API, and don't depend on saved artifacts or an API key. They check behaviour, not just types: a high-risk customer must outscore a low-risk one, and the top reasons must point in the right direction.
 
 ---
 
@@ -149,6 +151,7 @@ Raw Data (IBM Telco Customer Churn)
 | Explainability | SHAP |
 | LLM | Anthropic API (Claude Haiku) |
 | API Serving | FastAPI, Pydantic, Uvicorn |
+| Containerization | Docker |
 | Data | Pandas, NumPy, Matplotlib |
 | Testing | Pytest (session-scoped fixtures, mocked LLM client) |
 | Code Quality | Black (pre-commit) |
@@ -163,6 +166,7 @@ Raw Data (IBM Telco Customer Churn)
 churn-ai/
 ├── app/
 │   └── app.py                     # FastAPI service
+├── artifacts/                     # Trained model, preprocessor, SHAP background, metrics.json
 ├── notebooks/
 │   └── eda.ipynb                  # Exploratory data analysis
 ├── src/
@@ -182,7 +186,9 @@ churn-ai/
 │   └── utils/                     # Logging, exceptions, save/load helpers
 ├── tests/                         # Data, model, explanation, LLM and pipeline tests
 ├── main.py                        # Training entry point
-├── .github/workflows/ci.yaml      # Lint + test on every push
+├── Dockerfile                     # API image (uv + uvicorn)
+├── .dockerignore                  # Keeps .env, .venv, data and tests out of the build
+├── .github/workflows/main.yaml    # Lint + test on every push
 └── pyproject.toml                 # Dependencies + build config (uv)
 ```
 
@@ -202,16 +208,17 @@ uv sync
 echo "ANTHROPIC_API_KEY=your-key" > .env
 ```
 
-**3. Train and evaluate:**
-```bash
-uv run python main.py
-```
-
-**4. Start the API:**
+**3. Start the API.** Pre-trained artifacts are included, so you can serve straight away:
 ```bash
 uv run uvicorn app.app:app --reload
 ```
 Interactive docs: http://127.0.0.1:8000/docs
+
+**4. (Optional) Retrain and evaluate:**
+```bash
+uv run python main.py
+```
+This regenerates everything in `artifacts/`. Commit code and artifacts together so they stay in sync.
 
 **5. Make a prediction:**
 ```bash
@@ -231,6 +238,17 @@ curl -X POST "http://127.0.0.1:8000/predict" \
 ```bash
 uv run pytest -v
 ```
+
+---
+
+## Docker
+
+```bash
+docker build -t churn-ai .
+docker run -p 8000:8000 --env-file .env churn-ai
+```
+
+Then open http://127.0.0.1:8000/docs. Omit `--env-file .env` to run without LLM notes.
 
 ---
 
@@ -266,7 +284,9 @@ Invalid input (unknown category, out-of-range value) returns **422** with the of
 - **LLM evaluation:** score notes across 20–30 customers for grounding, causal language and action quality
 - **Business-specific offers:** give the LLM the company's actual retention offers to choose from
 - **API tests** with FastAPI's `TestClient`
-- **Deployment:** Docker image and a hosted endpoint, with the API key from a secret manager
+- **Cloud deployment:** push the image to a registry (e.g. Amazon ECR) and run it on a managed container service, with the API key from a secret manager and short-lived CI credentials (OIDC)
+- **Automated image builds** in GitHub Actions, with a post-deploy health check
+- **Model registry** (e.g. MLflow or S3) instead of committing artifacts to git
 - Cost-based threshold selection
 - Feature engineering (e.g. number of services)
 
