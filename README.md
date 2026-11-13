@@ -294,5 +294,5 @@ Invalid input (unknown category, out-of-range value) returns **422** with the of
 
 ## Author
 
-**Aishwarya Vadlamudi**, AI Software Architect transitioning to ML Engineering
+**Aishwarya Vadlamudi**, AI Software Architect
 [GitHub](https://github.com/aishvadla) · [LinkedIn](https://www.linkedin.com/in/aishwaryavadlamudi/)
