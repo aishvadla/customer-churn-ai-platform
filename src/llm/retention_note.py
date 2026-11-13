@@ -76,15 +76,18 @@ class RetentionNoteGenerator:
         try:
             response = self.client.messages.create(
                 model=self.model,
-                max_tokens=200,
+                max_tokens=1024,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": build_prompt(prediction)}],
             )
+            note = "".join(
+                block.text for block in response.content if block.type == "text"
+            ).strip()
             logger.info(
                 f"Retention note generated ({response.usage.input_tokens} in, "
                 f"{response.usage.output_tokens} out tokens)"
             )
-            return response.content[0].text.strip()
+            return note or None
         except Exception as e:
             logger.warning(f"Retention note generation failed: {e}")
             return None

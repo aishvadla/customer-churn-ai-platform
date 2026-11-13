@@ -41,8 +41,9 @@ class FakeMessages:
         if self.error:
             raise self.error
         return SimpleNamespace(
-            content=[SimpleNamespace(text=self.text)],
+            content=[SimpleNamespace(type="text", text=self.text)],
             usage=SimpleNamespace(input_tokens=10, output_tokens=20),
+            stop_reason="end_turn",
         )
 
 
@@ -71,3 +72,16 @@ def test_generate_returns_none_on_api_failure():
     messages = FakeMessages(error=RuntimeError("API down"))
     note = RetentionNoteGenerator(client=fake_client(messages)).generate(PREDICTION)
     assert note is None
+
+
+def test_generate_skips_thinking_blocks():
+    class ThinkingFirst(FakeMessages):
+        def create(self, **kwargs):
+            response = super().create(**kwargs)
+            response.content.insert(0, SimpleNamespace(type="thinking", thinking="..."))
+            return response
+
+    note = RetentionNoteGenerator(
+        client=fake_client(ThinkingFirst(text="Note."))
+    ).generate(PREDICTION)
+    assert note == "Note."
